@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from tools.fund_data import get_provider
+from fund.tools.fund_data import get_provider
 
 
 @dataclass

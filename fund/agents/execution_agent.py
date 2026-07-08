@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from config.settings import CONFIG
-from tools.fund_data import get_provider
+from fund.config.settings import CONFIG
+from fund.tools.fund_data import get_provider
 
 
 @dataclass

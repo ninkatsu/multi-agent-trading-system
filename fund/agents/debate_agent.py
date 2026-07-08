@@ -21,9 +21,9 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from config.llm import get_llm
-from config.json_utils import parse_json_loose
-from config.settings import CONFIG
+from fund.config.llm import get_llm
+from fund.config.json_utils import parse_json_loose
+from fund.config.settings import CONFIG
 
 MAX_DEBATE_ROUNDS = 2
 
