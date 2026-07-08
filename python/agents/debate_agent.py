@@ -15,9 +15,10 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from config.llm import get_llm
+from config.json_utils import parse_json_loose
 from config.settings import CONFIG
 
 MAX_DEBATE_ROUNDS = 2
@@ -77,11 +78,7 @@ Bear方论点: {bear_args}
 }}"""
 
     def __init__(self):
-        self.llm = ChatOpenAI(
-            model=CONFIG.llm.model,
-            temperature=0.5,
-            api_key=CONFIG.llm.api_key,
-        )
+        self.llm = get_llm(temperature=0.5)
 
     def _format_analyses(self, analyses: list[dict]) -> str:
         lines = []
@@ -100,10 +97,7 @@ Bear方论点: {bear_args}
             SystemMessage(content=prompt),
             HumanMessage(content=f"分析数据:\n{data_summary}"),
         ])
-        try:
-            return json.loads(response.content)
-        except json.JSONDecodeError:
-            return {"arguments": ["数据整体偏正面"], "confidence": 0.5}
+        return parse_json_loose(response.content) or {"arguments": ["数据整体偏正面"], "confidence": 0.5}
 
     def _run_bear(self, data_summary: str, bull_rebuttal: str = "") -> dict:
         prev = f"\nBull方刚才的论点: {bull_rebuttal}\n请反驳并强化你的看空立场。" if bull_rebuttal else ""
@@ -113,10 +107,7 @@ Bear方论点: {bear_args}
             SystemMessage(content=prompt),
             HumanMessage(content=f"分析数据:\n{data_summary}"),
         ])
-        try:
-            return json.loads(response.content)
-        except json.JSONDecodeError:
-            return {"arguments": ["存在潜在风险"], "confidence": 0.5}
+        return parse_json_loose(response.content) or {"arguments": ["存在潜在风险"], "confidence": 0.5}
 
     def _run_judge(self, data_summary: str, bull_args: list[str], bear_args: list[str]) -> dict:
         prompt = self.JUDGE_PROMPT.format(
@@ -127,16 +118,13 @@ Bear方论点: {bear_args}
             SystemMessage(content=prompt),
             HumanMessage(content=f"原始分析数据:\n{data_summary}"),
         ])
-        try:
-            return json.loads(response.content)
-        except json.JSONDecodeError:
-            return {
-                "final_signal": "HOLD",
-                "confidence": 0.3,
-                "reasoning": "辩论结果解析失败，保守持有",
-                "recommended_action": "观望",
-                "target_position_pct": 0.0,
-            }
+        return parse_json_loose(response.content) or {
+            "final_signal": "HOLD",
+            "confidence": 0.3,
+            "reasoning": "辩论结果解析失败，保守持有",
+            "recommended_action": "观望",
+            "target_position_pct": 0.0,
+        }
 
     def debate(self, analyses: list[dict]) -> DebateResult:
         data_summary = self._format_analyses(analyses)

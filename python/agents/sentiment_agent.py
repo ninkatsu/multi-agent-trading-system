@@ -18,9 +18,10 @@ from typing import Any
 import yfinance as yf
 import requests
 from textblob import TextBlob
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from config.llm import get_llm
+from config.json_utils import parse_json_loose
 from config.settings import CONFIG
 
 
@@ -59,16 +60,17 @@ class SentimentAgent:
 }"""
 
     def __init__(self):
-        self.llm = ChatOpenAI(
-            model=CONFIG.llm.model,
-            temperature=CONFIG.llm.temperature,
-            api_key=CONFIG.llm.api_key,
-        )
+        self.llm = get_llm(temperature=CONFIG.llm.temperature)
 
     def _analyze_news_sentiment(self, ticker: str) -> tuple[float, int]:
         """用yfinance获取新闻，TextBlob计算情绪极性均值"""
-        stock = yf.Ticker(ticker)
-        news = stock.news or []
+        # 防御性取数：stock.news 在限流时会抛 YFRateLimitError，必须捕获，
+        # 否则会冒泡到 LangGraph 让整张图崩溃。
+        try:
+            stock = yf.Ticker(ticker)
+            news = stock.news or []
+        except Exception:
+            news = []
 
         if not news:
             return 0.0, 0
@@ -121,10 +123,9 @@ class SentimentAgent:
             HumanMessage(content=user_prompt),
         ])
 
-        try:
-            result = json.loads(response.content)
-        except json.JSONDecodeError:
-            result = {"score": 5.0, "signal": "HOLD", "reasoning": "LLM输出解析失败"}
+        result = parse_json_loose(response.content) or {
+            "score": 5.0, "signal": "HOLD", "reasoning": "LLM输出解析失败"
+        }
 
         return SentimentAnalysis(
             ticker=ticker,

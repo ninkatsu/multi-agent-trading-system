@@ -15,8 +15,10 @@ from dataclasses import dataclass
 from typing import Any
 
 import yfinance as yf
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
+
+from config.llm import get_llm
+from config.json_utils import parse_json_loose
 
 from config.settings import CONFIG
 
@@ -62,15 +64,16 @@ class FundamentalAgent:
 }"""
 
     def __init__(self):
-        self.llm = ChatOpenAI(
-            model=CONFIG.llm.model,
-            temperature=CONFIG.llm.temperature,
-            api_key=CONFIG.llm.api_key,
-        )
+        self.llm = get_llm(temperature=CONFIG.llm.temperature)
 
     def fetch_fundamentals(self, ticker: str) -> dict[str, Any]:
-        stock = yf.Ticker(ticker)
-        info = stock.info
+        # 防御性取数：yfinance 在墙内常被限流/超时，失败时返回空字典，
+        # 由下游 analyze 用 N/A 占位、LLM 仍可给出保守判断，不让单点故障拖垮整张图。
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info or {}
+        except Exception:
+            return {}
         return {
             "pe_ratio": info.get("trailingPE"),
             "pb_ratio": info.get("priceToBook"),
@@ -104,10 +107,9 @@ class FundamentalAgent:
             HumanMessage(content=user_prompt),
         ])
 
-        try:
-            result = json.loads(response.content)
-        except json.JSONDecodeError:
-            result = {"score": 5.0, "signal": "HOLD", "reasoning": "LLM输出解析失败，默认HOLD"}
+        result = parse_json_loose(response.content) or {
+            "score": 5.0, "signal": "HOLD", "reasoning": "LLM输出解析失败，默认HOLD"
+        }
 
         return FundamentalAnalysis(
             ticker=ticker,

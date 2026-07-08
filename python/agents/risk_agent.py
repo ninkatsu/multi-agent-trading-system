@@ -17,9 +17,10 @@ from typing import Any
 
 import numpy as np
 import yfinance as yf
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from config.llm import get_llm
+from config.json_utils import parse_json_loose
 from config.settings import CONFIG
 
 
@@ -70,18 +71,18 @@ class RiskAgent:
 }"""
 
     def __init__(self):
-        self.llm = ChatOpenAI(
-            model=CONFIG.llm.model,
-            temperature=0.1,
-            api_key=CONFIG.llm.api_key,
-        )
+        self.llm = get_llm(temperature=0.1)
         self.risk_config = CONFIG.risk
 
     def _calculate_var(self, ticker: str, confidence: float = 0.95, period: str = "1y") -> float:
         """历史模拟法VaR: 基于过去一年日收益率分布，计算95%置信度下的单日最大损失"""
-        stock = yf.Ticker(ticker)
-        df = stock.history(period=period)
-        if df.empty or len(df) < 30:
+        # 防御性取数：yfinance 限流时返回保守默认 5% 单日 VaR，宁可误杀不可漏判。
+        try:
+            stock = yf.Ticker(ticker)
+            df = stock.history(period=period)
+        except Exception:
+            return 0.05
+        if df is None or df.empty or len(df) < 30:
             return 0.05
 
         daily_returns = df["Close"].pct_change().dropna()
@@ -147,23 +148,24 @@ VaR(95%): {var_95:.2%}
             HumanMessage(content=user_prompt),
         ])
 
-        try:
-            result = json.loads(response.content)
-        except json.JSONDecodeError:
-            result = {
-                "approved": False,
-                "adjusted_position_pct": 0.0,
-                "soft_warnings": ["LLM输出解析失败，保守否决"],
-                "reasoning": "解析失败，安全起见否决",
-            }
+        result = parse_json_loose(response.content) or {
+            "approved": False,
+            "adjusted_position_pct": 0.0,
+            "soft_warnings": ["LLM输出解析失败，保守否决"],
+            "reasoning": "解析失败，安全起见否决",
+        }
 
         adjusted_pos = min(
             result.get("adjusted_position_pct", 0.0),
             self.risk_config.max_position_size,
         )
 
-        stock = yf.Ticker(ticker)
-        current_price = stock.info.get("currentPrice", stock.info.get("regularMarketPrice", 0))
+        # 防御性取数：取不到现价则止损/止盈置 0，不阻塞风控裁决本身。
+        try:
+            stock = yf.Ticker(ticker)
+            current_price = stock.info.get("currentPrice", stock.info.get("regularMarketPrice", 0))
+        except Exception:
+            current_price = 0
         stop_loss = current_price * (1 - self.risk_config.stop_loss_pct) if current_price else 0
         take_profit = current_price * (1 + self.risk_config.take_profit_pct) if current_price else 0
 

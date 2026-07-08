@@ -18,9 +18,10 @@ from typing import Any
 import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from config.llm import get_llm
+from config.json_utils import parse_json_loose
 from config.settings import CONFIG
 
 
@@ -67,16 +68,17 @@ class TechnicalAgent:
 }"""
 
     def __init__(self):
-        self.llm = ChatOpenAI(
-            model=CONFIG.llm.model,
-            temperature=CONFIG.llm.temperature,
-            api_key=CONFIG.llm.api_key,
-        )
+        self.llm = get_llm(temperature=CONFIG.llm.temperature)
 
     def fetch_and_compute(self, ticker: str, period: str = "6mo") -> dict[str, Any]:
-        stock = yf.Ticker(ticker)
-        df = stock.history(period=period)
-        if df.empty:
+        # 防御性取数：yfinance 限流/超时直接抛异常，这里捕获后返回空，
+        # analyze 会回退到全 None 的 TechnicalAnalysis（score 默认 HOLD）。
+        try:
+            stock = yf.Ticker(ticker)
+            df = stock.history(period=period)
+        except Exception:
+            return {}
+        if df is None or df.empty:
             return {}
 
         df.ta.macd(append=True)
@@ -139,10 +141,9 @@ class TechnicalAgent:
             HumanMessage(content=user_prompt),
         ])
 
-        try:
-            result = json.loads(response.content)
-        except json.JSONDecodeError:
-            result = {"score": 5.0, "signal": "HOLD", "reasoning": "LLM输出解析失败"}
+        result = parse_json_loose(response.content) or {
+            "score": 5.0, "signal": "HOLD", "reasoning": "LLM输出解析失败"
+        }
 
         return TechnicalAnalysis(
             ticker=ticker,

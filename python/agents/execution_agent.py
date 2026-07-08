@@ -158,8 +158,12 @@ class ExecutionAgent:
         portfolio_value = state.get("portfolio_value", 1_000_000)
 
         import yfinance as yf
-        stock = yf.Ticker(ticker)
-        current_price = stock.info.get("currentPrice", stock.info.get("regularMarketPrice", 0))
+        # 防御性取数：取不到现价时 current_price=0，下游会走 ZERO_QTY 不下单。
+        try:
+            stock = yf.Ticker(ticker)
+            current_price = stock.info.get("currentPrice", stock.info.get("regularMarketPrice", 0))
+        except Exception:
+            current_price = 0
 
         result = self.execute(
             ticker=ticker,

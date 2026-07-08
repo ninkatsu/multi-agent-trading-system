@@ -1,7 +1,9 @@
 langgraph>=0.2.0
 langchain>=0.3.0
 langchain-openai>=0.2.0
+langchain-anthropic>=0.2.0
 langchain-community>=0.3.0
+anthropic>=0.39.0
 yfinance>=0.2.40
 pandas>=2.1.0
 numpy>=1.26.0
@@ -10,6 +12,8 @@ python-dotenv>=1.0.0
 pydantic>=2.5.0
 requests>=2.31.0
 textblob>=0.18.0
-alpaca-trade-api>=3.2.0
+# alpaca-trade-api 已废弃且会拉取需源码编译的旧 msgpack/websockets，
+# 在受限环境(应用控制策略)下无法构建。执行Agent默认 dry_run=True，无需真实下单；
+# 若需对接 Alpaca 模拟盘，请单独 pip install alpaca-py（现代版，有预编译wheel）。
 matplotlib>=3.8.0
 tabulate>=0.9.0
