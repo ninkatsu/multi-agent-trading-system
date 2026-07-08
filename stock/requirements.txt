@@ -1,0 +1,13 @@
+# ============================================
+# 股票版依赖 - 在 shared/requirements.txt 基础上附加
+# 安装: pip install -r ../shared/requirements.txt -r requirements.txt
+# ============================================
+
+# 市场数据
+yfinance>=0.2.40
+
+# 英文NLP (基金版用LLM直接判中文)
+textblob>=0.18.0
+
+# 注意: alpaca-trade-api 已废弃。执行Agent默认 dry_run=True。
+# 若需对接 Alpaca 模拟盘，请单独 pip install alpaca-py。

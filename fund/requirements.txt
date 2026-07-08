@@ -1,0 +1,10 @@
+# ============================================
+# 基金版依赖 - 在 shared/requirements.txt 基础上附加
+# 安装: pip install -r ../shared/requirements.txt -r requirements.txt
+# ============================================
+
+# 国内金融数据 (免费)
+akshare>=1.14.0
+
+# 股票版依赖 (yfinance 用于穿透分析取底层股票数据)
+yfinance>=0.2.40
