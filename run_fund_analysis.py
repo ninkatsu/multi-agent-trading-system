@@ -57,6 +57,29 @@ def main():
     fear = provider.get_market_fear_greed()
     print(f"  市场恐贪: {fear['index']} ({fear['label']})")
 
+    # ====== Step 0.5: 风格分析 / 数据新鲜度检查 ======
+    print("\n" + "=" * 70)
+    print("【Step 0.5】数据新鲜度 & 风格分析 (RBSA)")
+    print("=" * 70)
+    from fund.tools.style_analysis import run_style_analysis
+    style = run_style_analysis(fund_code)
+    print(f"  分析方法: {style.method}")
+    print(f"  置信度: {style.confidence}")
+    print(f"  净值趋势: {style.nav_trend}, 波动率: {style.nav_volatility:.1%}, "
+          f"回撤: {style.nav_drawdown_1y:.1%}")
+    if style.r_squared > 0:
+        print(f"  R²: {style.r_squared:.2%} | Alpha(日): {style.alpha_daily:.4%}")
+        if style.betas:
+            for name, beta in sorted(style.betas.items(), key=lambda x: abs(x[1]), reverse=True):
+                print(f"    {name}: β={beta:+.3f}")
+    if style.style_drift_detected:
+        print(f"  ⚠️ 风格漂移: {style.style_drift_detail}")
+    print(f"\n  📋 数据新鲜度声明:")
+    # 只打印blackout_warning前200字（避免太长）
+    lines = style.blackout_warning.split('\n')
+    for line in lines[:8]:
+        print(f"  {line}")
+
     # ====== Step 1: 并行分析 (三个Agent) ======
     print("\n" + "=" * 70)
     print("【Step 1】三Agent并行分析...")
@@ -191,11 +214,11 @@ def main():
     # ====== 生成报告 ======
     report_path = os.path.join(PROJECT_ROOT, "fund_analysis_report.md")
     _write_report(report_path, fund_code, info, manager, look, fear, nav,
-                  quality, tech, sent, debate_result, risk, execution)
+                  quality, tech, sent, debate_result, risk, execution, style)
     print(f"\n📄 完整报告已生成: {report_path}")
 
 
-def _write_report(path, code, info, mgr, look, fear, nav, q, t, s, debate, risk, exe):
+def _write_report(path, code, info, mgr, look, fear, nav, q, t, s, debate, risk, exe, style):
     """生成 Markdown 可溯源报告"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(path, "w", encoding="utf-8") as f:
@@ -225,6 +248,27 @@ def _write_report(path, code, info, mgr, look, fear, nav, q, t, s, debate, risk,
 | 净值数据量 | {len(nav)}条 | akshare fund_open_fund_info_em |
 
 > **数据可用性说明**: 持仓数据(季报)当前不可用 → 穿透分析跳过, 评分中以基金经理评估为主.
+
+---
+
+## 数据新鲜度 & 持仓黑箱期分析
+
+> **核心问题**: 基金每季度公布一次持仓，最新数据可能已滞后几十天。
+> 这期间基金经理可能已大幅换仓 → 基于季报的穿透分析可能失真。
+
+### RBSA风格分析结果
+
+| 指标 | 值 | 说明 |
+|------|-----|------|
+| 分析方法 | {style.method} | RBSA回归 / 仅净值分析 |
+| 置信度 | {style.confidence} | 高/中/低 |
+| 净值趋势 | {style.nav_trend} | — |
+| 年化波动率 | {style.nav_volatility:.1%} | 日收益标准差×√252 |
+| 近1年最大回撤 | {style.nav_drawdown_1y:.1%} | — |
+
+### 持仓真实性问题
+
+{style.blackout_warning}
 
 ---
 
